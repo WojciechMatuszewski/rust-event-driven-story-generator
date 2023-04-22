@@ -12,7 +12,19 @@ Globals:
     TracingEnabled: True
 
 Resources:
-  HelloWorldFunction:
+  StoryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: StoryTable
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  GenerateStoryTextLambda:
     Type: AWS::Serverless::Function
     Metadata:
       BuildMethod: rust-cargolambda
@@ -21,20 +33,23 @@ Resources:
       Runtime: provided.al2
       Architectures:
         - arm64
-      Events:
-        HelloWorld:
-          Type: Api
-          Properties:
-            Path: /hello
-            Method: get
 
-Outputs:
-  HelloWorldApi:
-    Description: "API Gateway endpoint URL for Prod stage for Hello World function"
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/hello/"
-  HelloWorldFunction:
-    Description: "Hello World Lambda Function ARN"
-    Value: !GetAtt HelloWorldFunction.Arn
-  HelloWorldFunctionIamRole:
-    Description: "Implicit IAM Role created for Hello World function"
-    Value: !GetAtt HelloWorldFunctionRole.Arn
+  StateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      DefinitionUri: ./machine.asl.json
+      DefinitionSubstitutions:
+        StoryTable: !Sub ${StoryTable}
+        GenerateStoryTextLambda: !Sub ${GenerateStoryTextLambda.Arn}
+      Policies:
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+              Resource: !Sub ${StoryTable.Arn}
+            - Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !Sub ${GenerateStoryTextLambda.Arn}

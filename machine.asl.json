@@ -1,0 +1,55 @@
+{
+  "StartAt": "CreateStoryItem",
+  "States": {
+    "CreateStoryItem": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:putItem",
+      "Parameters": {
+        "TableName": "${StoryTable}",
+        "Item": {
+          "pk": {
+            "S.$": "States.Format('JOKE#{}', $$.Execution.Id)"
+          },
+          "status": {
+            "S": "STARTING"
+          }
+        }
+      },
+      "Next": "GenerateStoryText",
+      "ResultPath": null,
+      "OutputPath": "$"
+    },
+    "GenerateStoryText": {
+      "Type": "Task",
+      "Resource": "${GenerateStoryTextLambda}",
+      "OutputPath": "$",
+      "Next": "UpdateStoryItem"
+    },
+    "UpdateStoryItem": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:updateItem",
+      "Parameters": {
+        "TableName": "${StoryTable}",
+        "Key": {
+          "pk": {
+            "S.$": "States.Format('JOKE#{}', $$.Execution.Id)"
+          }
+        },
+        "UpdateExpression": "SET #status = :status, #text = :text",
+        "ExpressionAttributeNames": {
+          "#status": "status",
+          "#text": "text"
+        },
+        "ExpressionAttributeValues": {
+          ":status": {
+            "S": "TEXT_GENERATED"
+          },
+          ":text": {
+            "S.$": "$.joke"
+          }
+        }
+      },
+      "End": true
+    }
+  }
+}
