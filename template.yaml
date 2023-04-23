@@ -74,7 +74,7 @@ Resources:
   StateMachine:
     Type: AWS::Serverless::StateMachine
     Properties:
-      # I had to explicitly specify the name due to circural dependency
+      # I had to explicitly specify the name due to circular dependency.
       Name: StoryGenerationStateMachine
       DefinitionUri: ./machine.asl.json
       DefinitionSubstitutions:
