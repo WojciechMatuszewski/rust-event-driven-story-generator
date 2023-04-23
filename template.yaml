@@ -7,11 +7,14 @@ Globals:
     Timeout: 3
     MemorySize: 128
     Tracing: Active
-    CodeUri: ./ # This has to be the path to the folder containing the Cargo.toml file!
   Api:
     TracingEnabled: True
 
 Resources:
+  StoryAudioBucket:
+    Type: AWS::S3::Bucket
+    Properties: {}
+
   StoryTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -26,21 +29,59 @@ Resources:
 
   GenerateStoryTextLambda:
     Type: AWS::Serverless::Function
-    Metadata:
-      BuildMethod: rust-cargolambda
     Properties:
+      CodeUri: target/lambda/story-text-generator/
       Handler: bootstrap
       Runtime: provided.al2
       Architectures:
         - arm64
 
+  NotifyAudioGenerationStatusLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: target/lambda/story-audio-status-notifier/
+      Handler: bootstrap
+      Runtime: provided.al2
+      Architectures:
+        - arm64
+      Environment:
+        Variables:
+          STORY_AUDIO_BUCKET_NAME: !Sub ${StoryAudioBucket}
+      Policies:
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - states:SendTaskSuccess
+                - states:SendTaskFailure
+              Resource: !Sub arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:stateMachine:StoryGenerationStateMachine
+
+  AllowTopicLambdaInvoke:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${NotifyAudioGenerationStatusLambda.Arn}
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Sub ${GenerateAudioStatusTopic.TopicArn}
+
+  GenerateAudioStatusTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Endpoint: !Sub ${NotifyAudioGenerationStatusLambda.Arn}
+          Protocol: lambda
+
   StateMachine:
     Type: AWS::Serverless::StateMachine
     Properties:
+      # I had to explicitly specify the name due to circural dependency
+      Name: StoryGenerationStateMachine
       DefinitionUri: ./machine.asl.json
       DefinitionSubstitutions:
         StoryTable: !Sub ${StoryTable}
         GenerateStoryTextLambda: !Sub ${GenerateStoryTextLambda.Arn}
+        StoryAudioBucket: !Sub ${StoryAudioBucket}
+        StoryAudioTopic: !Sub ${GenerateAudioStatusTopic.TopicArn}
       Policies:
         - Version: 2012-10-17
           Statement:
@@ -53,3 +94,15 @@ Resources:
               Action:
                 - lambda:InvokeFunction
               Resource: !Sub ${GenerateStoryTextLambda.Arn}
+            - Effect: Allow
+              Action:
+                - polly:StartSpeechSynthesisTask
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+              Resource: !Sub arn:aws:s3:::${StoryAudioBucket}/*
+            - Effect: Allow
+              Action:
+                - sns:Publish
+              Resource: !Sub ${GenerateAudioStatusTopic.TopicArn}

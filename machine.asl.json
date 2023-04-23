@@ -49,6 +49,24 @@
           }
         }
       },
+      "Next": "GenerateStoryAudio",
+      "ResultPath": null,
+      "OutputPath": "$"
+    },
+    "GenerateStoryAudio": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:polly:startSpeechSynthesisTask.waitForTaskToken",
+      "HeartbeatSeconds": 120,
+      "Parameters": {
+        "OutputFormat": "mp3",
+        "OutputS3BucketName": "${StoryAudioBucket}",
+        "OutputS3KeyPrefix.$": "States.Format('{}/output', $$.Task.Token)",
+        "SnsTopicArn": "${StoryAudioTopic}",
+        "VoiceId": "Justin",
+        "Text.$": "$.joke",
+        "Engine": "standard",
+        "LanguageCode": "en-US"
+      },
       "End": true
     }
   }

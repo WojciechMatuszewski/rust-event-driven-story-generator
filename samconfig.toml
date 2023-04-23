@@ -20,7 +20,7 @@ confirm_changeset = false
 resolve_s3 = true
 region = "eu-west-1"
 s3_prefix = "event-driven-story-time"
-disable_rollback = true
+disable_rollback = false
 image_repositories = []
 
 [default.package.parameters]
