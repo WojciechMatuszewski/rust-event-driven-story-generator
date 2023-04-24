@@ -26,6 +26,36 @@ Resources:
         - AttributeName: pk
           KeyType: HASH
       BillingMode: PAY_PER_REQUEST
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+
+  ClientNotifierLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: target/lambda/client-notifier/
+      Handler: bootstrap
+      Runtime: provided.al2
+      Architectures:
+        - arm64
+      Policies:
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - iot:Publish
+              Resource:
+                - !Sub arn:${AWS::Partition}:iot:${AWS::Region}:${AWS::AccountId}:topic/story/*
+      Events:
+        DynamoDBStream:
+          Type: DynamoDB
+          Properties:
+            BatchSize: 1 # The batch size is low to simulate slower events that come right after each other.
+            StartingPosition: LATEST
+            MaximumRetryAttempts: 2
+            Stream: !Sub ${StoryTable.StreamArn}
+            FilterCriteria:
+              Filters:
+                - Pattern: '{"eventName": ["INSERT", "MODIFY"]}'
 
   GenerateStoryTextLambda:
     Type: AWS::Serverless::Function

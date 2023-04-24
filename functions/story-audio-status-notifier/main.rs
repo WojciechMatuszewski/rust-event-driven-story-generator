@@ -1,4 +1,3 @@
-use aws_lambda_events::sns::SnsEvent;
 use lambda_runtime::{run, service_fn, Error, LambdaEvent};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -22,7 +21,9 @@ struct Output {
     message: String,
 }
 
-async fn function_handler(event: LambdaEvent<SnsEvent>) -> Result<Output, Error> {
+async fn function_handler(
+    event: LambdaEvent<aws_lambda_events::sns::SnsEvent>,
+) -> Result<Output, Error> {
     let record = event.payload.records.get(0).unwrap();
     let message: Message = serde_json::from_str(&record.sns.message)?;
 
@@ -41,7 +42,7 @@ async fn function_handler(event: LambdaEvent<SnsEvent>) -> Result<Output, Error>
             client
                 .send_task_success()
                 .set_task_token(Some(task_token))
-                .set_output(Some(json!({"message": "Done"}).to_string()))
+                .set_output(Some(json!({"location": message.output_uri}).to_string()))
                 .send()
                 .await?;
         }

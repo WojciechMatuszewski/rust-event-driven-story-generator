@@ -15,6 +15,12 @@
           }
         }
       },
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "UpdateStoryItemFailure"
+        }
+      ],
       "Next": "GenerateStoryText",
       "ResultPath": null,
       "OutputPath": "$"
@@ -23,9 +29,15 @@
       "Type": "Task",
       "Resource": "${GenerateStoryTextLambda}",
       "OutputPath": "$",
-      "Next": "UpdateStoryItem"
+      "Next": "UpdateStoryItemWithText",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "UpdateStoryItemFailure"
+        }
+      ]
     },
-    "UpdateStoryItem": {
+    "UpdateStoryItemWithText": {
       "Type": "Task",
       "Resource": "arn:aws:states:::dynamodb:updateItem",
       "Parameters": {
@@ -49,6 +61,12 @@
           }
         }
       },
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "UpdateStoryItemFailure"
+        }
+      ],
       "Next": "GenerateStoryAudio",
       "ResultPath": null,
       "OutputPath": "$"
@@ -66,6 +84,67 @@
         "Text.$": "$.joke",
         "Engine": "standard",
         "LanguageCode": "en-US"
+      },
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "UpdateStoryItemFailure"
+        }
+      ],
+      "Next": "UpdateStoryItemWithAudio",
+      "OutputPath": "$"
+    },
+    "UpdateStoryItemWithAudio": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:updateItem",
+      "Parameters": {
+        "TableName": "${StoryTable}",
+        "Key": {
+          "pk": {
+            "S.$": "States.Format('JOKE#{}', $$.Execution.Id)"
+          }
+        },
+        "UpdateExpression": "SET #status = :status, #audio = :audio",
+        "ExpressionAttributeNames": {
+          "#status": "status",
+          "#audio": "audio"
+        },
+        "ExpressionAttributeValues": {
+          ":status": {
+            "S": "COMPLETED"
+          },
+          ":audio": {
+            "S.$": "$.location"
+          }
+        }
+      },
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "UpdateStoryItemFailure"
+        }
+      ],
+      "End": true
+    },
+    "UpdateStoryItemFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:updateItem",
+      "Parameters": {
+        "TableName": "${StoryTable}",
+        "Key": {
+          "pk": {
+            "S.$": "States.Format('JOKE#{}', $$.Execution.Id)"
+          }
+        },
+        "UpdateExpression": "SET #status = :status",
+        "ExpressionAttributeNames": {
+          "#status": "status"
+        },
+        "ExpressionAttributeValues": {
+          ":status": {
+            "S": "FAILED"
+          }
+        }
       },
       "End": true
     }
