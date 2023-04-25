@@ -136,3 +136,83 @@ Resources:
               Action:
                 - sns:Publish
               Resource: !Sub ${GenerateAudioStatusTopic.TopicArn}
+
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UsernameAttributes:
+        - email
+      Schema:
+        - Name: email
+          Required: true
+          Mutable: false
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 6
+          RequireLowercase: false
+          RequireNumbers: false
+          RequireSymbols: false
+          RequireUppercase: false
+
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Sub ${CognitoUserPool}
+      GenerateSecret: false
+      SupportedIdentityProviders:
+        - COGNITO
+
+  CognitoIdentityPool:
+    Type: AWS::Cognito::IdentityPool
+    Properties:
+      AllowUnauthenticatedIdentities: true
+      CognitoIdentityProviders:
+        - ClientId: !Sub ${CognitoUserPoolClient}
+          ProviderName: !Sub ${CognitoUserPool.ProviderName}
+
+  CognitoIdentityRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: cognito-identity.amazonaws.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                "cognito-identity.amazonaws.com:aud": !Sub ${CognitoIdentityPool}
+      Policies:
+        - PolicyName: CognitoIdentityPoolRole
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - iot:Connect
+                Resource: !Sub arn:${AWS::Partition}:iot:${AWS::Region}:${AWS::AccountId}:client/*
+              - Effect: Allow
+                Action:
+                  - iot:Subscribe
+                Resource: !Sub arn:${AWS::Partition}:iot:${AWS::Region}:${AWS::AccountId}:topicfilter/story/*
+              - Effect: Allow
+                Action:
+                  - iot:Receive
+                Resource: !Sub arn:${AWS::Partition}:iot:${AWS::Region}:${AWS::AccountId}:topic/story/*
+
+  CognitoIdentityPoolRoleAttachment:
+    Type: AWS::Cognito::IdentityPoolRoleAttachment
+    Properties:
+      IdentityPoolId: !Sub ${CognitoIdentityPool}
+      Roles:
+        unauthenticated: !Sub ${CognitoIdentityRole.Arn}
+        authenticated: !Sub ${CognitoIdentityRole.Arn}
+
+Outputs:
+  UserPoolId:
+    Value: !Sub ${CognitoUserPool}
+  UserPoolClientId:
+    Value: !Sub ${CognitoUserPoolClient}
+  IdentityPoolId:
+    Value: !Sub ${CognitoIdentityPool}

@@ -30,7 +30,7 @@ async fn function_handler(
         let client = aws_sdk_iotdataplane::client::Client::new(&config);
         let to_pass_record = record.clone();
 
-        return tokio::spawn(async move { process_record(&client, &to_pass_record).await });
+        return tokio::spawn(async move { process_record(client, to_pass_record).await });
     });
 
     join_all(handles).await;
@@ -39,17 +39,17 @@ async fn function_handler(
 }
 
 async fn process_record(
-    client: &aws_sdk_iotdataplane::client::Client,
-    record: &aws_lambda_events::dynamodb::EventRecord,
+    client: aws_sdk_iotdataplane::client::Client,
+    record: aws_lambda_events::dynamodb::EventRecord,
 ) {
-    let item: Item = serde_dynamo::from_item(record.change.new_image.clone()).unwrap();
+    let item: Item = serde_dynamo::from_item(record.change.new_image).unwrap();
     let payload = serde_json::to_string(&item).unwrap();
 
     client
         .publish()
         .topic("story/1")
-        .payload(Blob::new(payload.as_bytes()))
         .qos(1)
+        .payload(Blob::new(payload.as_bytes()))
         .send()
         .await
         .unwrap();
