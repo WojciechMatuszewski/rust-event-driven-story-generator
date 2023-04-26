@@ -21,3 +21,13 @@ Implementing [this architecture](https://serverlessland.com/blog/implementing-an
 - Using the _TaskToken_ with the SFN native SDK integrations is a bit hard. I had to encode the _TaskToken_ into the S3 path to be able to retrieve it later on.
 
   - I could use the sync version of the text-to-speech synthesizes, but that would not be fun!
+
+- The interface to generate a _presigned S3 URL_ is a bit weird to me.
+
+  - The initial part makes sense – you specify the key, object and any other attributes.
+
+  - The second part is a bit weird. To get the URL, not the S3 URI, you have to turn the returned data into HTTP request.
+
+    - That would not be weird if it did not require me to provide a body, which does not make sense for the `getObject` calls?
+
+      - Maybe I'm wrong, IDK.

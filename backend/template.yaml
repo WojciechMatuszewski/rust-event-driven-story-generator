@@ -32,7 +32,7 @@ Resources:
   ClientNotifierLambda:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: target/lambda/client-notifier/
+      CodeUri: ../target/lambda/client-notifier/
       Handler: bootstrap
       Runtime: provided.al2
       Architectures:
@@ -60,7 +60,7 @@ Resources:
   GenerateStoryTextLambda:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: target/lambda/story-text-generator/
+      CodeUri: ../target/lambda/story-text-generator/
       Handler: bootstrap
       Runtime: provided.al2
       Architectures:
@@ -69,7 +69,7 @@ Resources:
   NotifyAudioGenerationStatusLambda:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: target/lambda/story-audio-status-notifier/
+      CodeUri: ../target/lambda/story-audio-status-notifier/
       Handler: bootstrap
       Runtime: provided.al2
       Architectures:
@@ -85,6 +85,12 @@ Resources:
                 - states:SendTaskSuccess
                 - states:SendTaskFailure
               Resource: !Sub arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:stateMachine:StoryGenerationStateMachine
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+              Resource: !Sub arn:${AWS::Partition}:s3:::${StoryAudioBucket}/*
 
   AllowTopicLambdaInvoke:
     Type: AWS::Lambda::Permission
@@ -131,7 +137,7 @@ Resources:
             - Effect: Allow
               Action:
                 - s3:PutObject
-              Resource: !Sub arn:aws:s3:::${StoryAudioBucket}/*
+              Resource: !Sub arn:${AWS::Partition}:s3:::${StoryAudioBucket}/*
             - Effect: Allow
               Action:
                 - sns:Publish
@@ -209,6 +215,87 @@ Resources:
         unauthenticated: !Sub ${CognitoIdentityRole.Arn}
         authenticated: !Sub ${CognitoIdentityRole.Arn}
 
+  GenerateStoryAPI:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: GenerateStoryAPI
+
+  StoryResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !Sub ${GenerateStoryAPI.RootResourceId}
+      RestApiId: !Sub ${GenerateStoryAPI}
+      PathPart: story
+
+  InvokeStateMachineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AllowInvokeStateMachine
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - states:StartExecution
+                Resource: !Sub ${StateMachine}
+
+  GenerateStoryMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Sub ${GenerateStoryAPI}
+      ResourceId: !Sub ${StoryResource}
+      HttpMethod: POST
+      ApiKeyRequired: false
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS
+        Credentials: !Sub ${InvokeStateMachineRole.Arn}
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:states:action/StartExecution
+        PassthroughBehavior: WHEN_NO_TEMPLATES
+        RequestTemplates:
+          application/json: !Sub >
+            {
+              "input": "{}",
+              "stateMachineArn": "${StateMachine}"
+            }
+        IntegrationResponses:
+          - StatusCode: "200"
+            SelectionPattern: 2\d{2}
+            ResponseTemplates:
+              # How do I append two strings here?
+              # Doing "JOKE#"$executionArn returns "JOKE""ARN"
+              application/json: >
+                #set($context.responseOverride.status = 202)
+                #set($executionArn = $input.json('$.executionArn'))
+                {
+                  "id":  $executionArn
+                }
+          - StatusCode: "400"
+            SelectionPattern: 4\d{2}
+            ResponseTemplates:
+              application/json: >
+                $input.json("$")
+      MethodResponses:
+        - StatusCode: "200"
+        - StatusCode: "400"
+
+  GenerateStoryAPIDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - GenerateStoryMethod
+    Properties:
+      RestApiId: !Sub ${GenerateStoryAPI}
+      StageName: dev
+
 Outputs:
   UserPoolId:
     Value: !Sub ${CognitoUserPool}
@@ -216,3 +303,5 @@ Outputs:
     Value: !Sub ${CognitoUserPoolClient}
   IdentityPoolId:
     Value: !Sub ${CognitoIdentityPool}
+  GenerateStoryAPI:
+    Value: !Sub https://${GenerateStoryAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}/dev/story

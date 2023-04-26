@@ -1,3 +1,6 @@
+use std::time::Duration;
+
+use aws_sdk_s3::presigning;
 use lambda_runtime::{run, service_fn, Error, LambdaEvent};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -31,23 +34,41 @@ async fn function_handler(
 
     let bucket_name = std::env::var("STORY_AUDIO_BUCKET_NAME")?;
     let task_token = get_task_token(&message, &bucket_name);
+    let key = get_audio_key(&message, &bucket_name);
 
     println!("Got the task token and the bucket name");
 
     let config = aws_config::load_from_env().await;
-    let client = aws_sdk_sfn::client::Client::new(&config);
+    let sfn_client = aws_sdk_sfn::client::Client::new(&config);
+
+    println!("Getting the presigned URL");
+
+    let s3_client = aws_sdk_s3::client::Client::new(&config);
+
+    let expires_in = Duration::from_secs(60 * 60);
+    let presigned_url = s3_client
+        .get_object()
+        .bucket(bucket_name)
+        .key(key)
+        .presigned(presigning::PresigningConfig::expires_in(expires_in)?)
+        .await?
+        .to_http_request::<Option<String>>(None)?;
+
+    println!("Got the presigned URL foo bar");
 
     match message.task_status {
         TaskStatus::COMPLETED => {
-            client
+            sfn_client
                 .send_task_success()
                 .set_task_token(Some(task_token))
-                .set_output(Some(json!({"location": message.output_uri}).to_string()))
+                .set_output(Some(
+                    json!({"location": presigned_url.uri().to_string()}).to_string(),
+                ))
                 .send()
                 .await?;
         }
         _ => {
-            client
+            sfn_client
                 .send_task_failure()
                 .set_task_token(Some(task_token))
                 .send()
@@ -71,6 +92,12 @@ async fn main() -> Result<(), Error> {
         .init();
 
     run(service_fn(function_handler)).await
+}
+
+fn get_audio_key(message: &Message, bucket_name: &str) -> String {
+    let bucket_uri = format!("s3://{}/", bucket_name);
+    let key = message.output_uri.trim_start_matches(bucket_uri.as_str());
+    return key.to_string();
 }
 
 fn get_task_token(message: &Message, bucket_name: &str) -> String {
