@@ -31,3 +31,13 @@ Implementing [this architecture](https://serverlessland.com/blog/implementing-an
     - That would not be weird if it did not require me to provide a body, which does not make sense for the `getObject` calls?
 
       - Maybe I'm wrong, IDK.
+
+- When working with **APIGW mapping templates**, I **was unable to join two strings together**.
+
+  - One value was coming from the input – `input.json("$.executionArn")`, the other was a plain string – `JOKE#`.
+
+  - For some reason, most of my tries yielded `"JOKE#""EXECUTION_ARN"` rather than the correct string.
+
+- Be **mindful of the MQTT topic names**. For example, you **cannot have a topic containing `#`**. If you do, the MQTT will close the socket.
+
+- And as always, do not be me and **do not waste your time debugging stale API definitions. Please REMEMBER TO DEPLOY THE APIGW!**.

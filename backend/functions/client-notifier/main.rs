@@ -45,9 +45,10 @@ async fn process_record(
     let item: Item = serde_dynamo::from_item(record.change.new_image).unwrap();
     let payload = serde_json::to_string(&item).unwrap();
 
+    let topic = format!("story/{}", item.pk.trim_start_matches("JOKE#"));
     client
         .publish()
-        .topic("story/1")
+        .topic(topic)
         .qos(1)
         .payload(Blob::new(payload.as_bytes()))
         .send()

@@ -215,17 +215,46 @@ Resources:
         unauthenticated: !Sub ${CognitoIdentityRole.Arn}
         authenticated: !Sub ${CognitoIdentityRole.Arn}
 
-  GenerateStoryAPI:
+  GenerateStoryAPI2:
     Type: AWS::ApiGateway::RestApi
     Properties:
-      Name: GenerateStoryAPI
+      Name: GenerateStoryAPI2
 
   StoryResource:
     Type: AWS::ApiGateway::Resource
     Properties:
-      ParentId: !Sub ${GenerateStoryAPI.RootResourceId}
-      RestApiId: !Sub ${GenerateStoryAPI}
+      ParentId: !Sub ${GenerateStoryAPI2.RootResourceId}
+      RestApiId: !Sub ${GenerateStoryAPI2}
       PathPart: story
+
+  GenerateStoryAPICors:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      RestApiId: !Sub ${GenerateStoryAPI2}
+      ResourceId: !Sub ${StoryResource}
+      HttpMethod: OPTIONS
+      Integration:
+        IntegrationResponses:
+          - StatusCode: "200"
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'*'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: ""
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        Type: MOCK
+      MethodResponses:
+        - StatusCode: "200"
+          ResponseModels:
+            application/json: "Empty"
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: false
+            method.response.header.Access-Control-Allow-Methods: false
+            method.response.header.Access-Control-Allow-Origin: false
 
   InvokeStateMachineRole:
     Type: AWS::IAM::Role
@@ -250,7 +279,7 @@ Resources:
   GenerateStoryMethod:
     Type: AWS::ApiGateway::Method
     Properties:
-      RestApiId: !Sub ${GenerateStoryAPI}
+      RestApiId: !Sub ${GenerateStoryAPI2}
       ResourceId: !Sub ${StoryResource}
       HttpMethod: POST
       ApiKeyRequired: false
@@ -279,6 +308,10 @@ Resources:
                 {
                   "id":  $executionArn
                 }
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Methods: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
           - StatusCode: "400"
             SelectionPattern: 4\d{2}
             ResponseTemplates:
@@ -286,6 +319,10 @@ Resources:
                 $input.json("$")
       MethodResponses:
         - StatusCode: "200"
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: false
+            method.response.header.Access-Control-Allow-Methods: false
+            method.response.header.Access-Control-Allow-Headers: false
         - StatusCode: "400"
 
   GenerateStoryAPIDeployment:
@@ -293,7 +330,7 @@ Resources:
     DependsOn:
       - GenerateStoryMethod
     Properties:
-      RestApiId: !Sub ${GenerateStoryAPI}
+      RestApiId: !Sub ${GenerateStoryAPI2}
       StageName: dev
 
 Outputs:
@@ -303,5 +340,5 @@ Outputs:
     Value: !Sub ${CognitoUserPoolClient}
   IdentityPoolId:
     Value: !Sub ${CognitoIdentityPool}
-  GenerateStoryAPI:
-    Value: !Sub https://${GenerateStoryAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}/dev/story
+  GenerateStoryAPI2:
+    Value: !Sub https://${GenerateStoryAPI2}.execute-api.${AWS::Region}.${AWS::URLSuffix}/dev/story
