@@ -1,8 +1,16 @@
 # Event-Driven stories generator
 
-Implementing [this architecture](https://serverlessland.com/blog/implementing-an-event-driven-serverless-story-generation-application-with-chatgpt-and-dall-e--aws-compute-blog).
+Roughly implements [this architecture](https://serverlessland.com/blog/implementing-an-event-driven-serverless-story-generation-application-with-chatgpt-and-dall-e--aws-compute-blog).
 
-- Is there a way to make the generation of the speech and images asynchronous with `waitForTaskToken`?
+The changes I've made
+
+- Use a public jokes API instead of OpenAI paid API
+
+- Use state machine for orchestration. The dream would be to get rid of the AWS Lambda functions but that was not possible
+
+  - The biggest challenge was to make the _transcribe audio_ call asynchronous with _TaskToken_.
+
+- Uses IOT Core MQTT WebSockets to push updates to the frontend.
 
 ## Learnings
 
@@ -21,6 +29,16 @@ Implementing [this architecture](https://serverlessland.com/blog/implementing-an
 - Using the _TaskToken_ with the SFN native SDK integrations is a bit hard. I had to encode the _TaskToken_ into the S3 path to be able to retrieve it later on.
 
   - I could use the sync version of the text-to-speech synthesizes, but that would not be fun!
+
+- **I did not have to create any particular IOT Core resource for the WebSocket to work!**.
+
+  - This is great as I find the implementation of IOT Core WebSockets much better than the APIGW one.
+
+    - You do not have to manage the state.
+
+    - You can subscribe to given topics, even multiple of them!
+
+    - It works nicely with IAM.
 
 - The interface to generate a _presigned S3 URL_ is a bit weird to me.
 
@@ -41,3 +59,11 @@ Implementing [this architecture](https://serverlessland.com/blog/implementing-an
 - Be **mindful of the MQTT topic names**. For example, you **cannot have a topic containing `#`**. If you do, the MQTT will close the socket.
 
 - And as always, do not be me and **do not waste your time debugging stale API definitions. Please REMEMBER TO DEPLOY THE APIGW!**.
+
+- I was pretty **surprised by how Qwik handles environment variables**. Using `import.meta.env` feels a bit off after years of using `process.env` on both frontend and backend.
+
+  - The `import.meta.env` convention is present in Vite and since Qwik is using Vite, no wonder it uses the same convention.
+
+  - While reading the docs about the `import.meta`, I've noticed that, **according to MDN, the spec does not list any properties on this object**. It is up to browser implementers to add some (usually `url` and `resolve`).
+
+    - This saddens me a bit, because it will most likely lead to incompatibilities between different browsers down the line.
